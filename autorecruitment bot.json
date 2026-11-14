@@ -1,0 +1,1477 @@
+{
+  "name": "Recruitment Screening Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        480
+      ],
+      "id": "84463e92-a73f-4029-815e-07486a46a7a8",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_GID",
+          "mode": "id"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        240,
+        304
+      ],
+      "id": "d057c8a5-8edd-40ea-a51d-588381846f83",
+      "name": "SWE"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_GID",
+          "mode": "id"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        240,
+        560
+      ],
+      "id": "7101f67e-ce76-4d71-99d8-943207992aca",
+      "name": "Get row(s) in sheet"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        480,
+        368
+      ],
+      "id": "c9f93df0-c6be-4f4e-aad3-2f5f78f673ae",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.filter(item => {\n  const status = String(item.json.Status || '')\n    .trim()\n    .toLowerCase();\n\n  return status === '' || status === 'new';\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        368
+      ],
+      "id": "a8f4d12d-a732-486c-a09e-05ba155ac583",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "const allItems = $input.all();\n\nconst masterEmails = new Set();\nconst newCandidates = [];\n\nfor (const item of allItems) {\n  // Check if the item comes from the Master Sheet (identified by Candidate ID)\n  if (item.json['Candidate ID'] || item.json.candidateId) {\n    const masterEmail = String(\n      item.json.Email || item.json.email || ''\n    ).trim().toLowerCase();\n    if (masterEmail) {\n      masterEmails.add(masterEmail);\n    }\n  } else {\n    // Otherwise, it's a new incoming application from SWE or BDM forms\n    newCandidates.push(item);\n  }\n}\n\nconst seenThisRun = new Set();\n\nreturn newCandidates.map(item => {\n  const email = String(\n    item.json['Email Address'] || \n    item.json.Email || \n    item.json.email || ''\n  ).trim().toLowerCase();\n\n  const alreadyInMaster = masterEmails.has(email);\n  const alreadyInBatch = seenThisRun.has(email);\n\n  seenThisRun.add(email);\n\n  return {\n    json: {\n      ...item.json,\n      isDuplicate: alreadyInMaster || alreadyInBatch,\n      duplicateReason: alreadyInMaster \n        ? 'exists_in_master' \n        : alreadyInBatch \n          ? 'duplicate_in_batch' \n          : 'none'\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1216,
+        272
+      ],
+      "id": "5824c62f-a43b-4574-9da0-2dc30f344380",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst data = $json;\n\n// Support both form field names\nconst resumeUrl = data['Resume/CV'] || data['Resume'];\n\nif (!resumeUrl) {\n  throw new Error('Resume URL is missing');\n}\n\n// Extract Google Drive file ID\nconst match = resumeUrl.match(/[?&]id=([^&]+)/) ||\n              resumeUrl.match(/\\/file\\/d\\/([^/]+)/);\n\nif (!match) {\n  throw new Error('Could not extract Google Drive file ID');\n}\n\nconst fileId = match[1];\n\nreturn {\n  json: {\n    ...data,\n    resumeFileId: fileId,\n    directDownloadUrl: `https://drive.google.com/uc?export=download&id=${fileId}`\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1728,
+        336
+      ],
+      "id": "bfc15d89-5124-4e62-af1a-4a59768e5223",
+      "name": "Convert Drive URL to Direct Download"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.2,
+      "position": [
+        2176,
+        336
+      ],
+      "id": "013d394a-2761-4ab9-9e86-b33e3565be6a",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.resumeFileId }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1952,
+        336
+      ],
+      "id": "cc627580-3b97-429f-a5b0-8235224f2a55",
+      "name": "Download file"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst extracted = $json;\n\n// Recover the original application details\nconst source = $('Convert Drive URL to Direct Download').item.json;\n\nconst data = {\n  ...source,\n  ...extracted\n};\n\nconst isBDM =\n  data['Industry Experience'] !== undefined ||\n  data['Largest Deal Closed in USD'] !== undefined;\n\nconst isSWE =\n  data['Primary Programming Language'] !== undefined ||\n  data['Github Profile URL'] !== undefined;\n\nif (!isBDM && !isSWE) {\n  throw new Error('Could not identify applicant role');\n}\n\nconst role = isBDM\n  ? 'Business Development Manager'\n  : 'Software Engineer';\n\nconst cvText = data.text || '';\n\nconst applicationDetails = {\n  name: data.Name || data['Full Name'] || '',\n  email: data.Email || '',\n  phone: data['Phone Number'] || data['Phone number'] || '',\n  role,\n  experience: data.Experience || data['Years of Experience'] || '',\n  linkedin: data['LinkedIn Profile URL'] || '',\n  additionalDetails: isBDM\n    ? {\n        industryExperience: data['Industry Experience'] || '',\n        largestDealClosedUSD: data['Largest Deal Closed in USD'] || ''\n      }\n    : {\n        primaryProgrammingLanguage: data['Primary Programming Language'] || '',\n        github: data['Github Profile URL'] || ''\n      }\n};\n\nconst prompt = `\nYou are assisting a human hiring team.\n\nEvaluate this candidate ONLY for the following role:\n${role}\n\nCandidate information:\n${JSON.stringify(applicationDetails, null, 2)}\n\nExtracted CV:\n${cvText}\n\nProvide:\n1. Job-related skills summary.\n2. Evidence-based strengths.\n3. Missing information or concerns.\n4. Suggested interview focus.\n5. Preliminary score from 1 to 10.\n\nDo not infer protected characteristics.\nDo not make final hiring or rejection decisions.\nA human must review every application.\n\nReturn valid JSON with:\nscore, classification, summary, strengths, concerns,\ninterviewRecommendation.\n\nClassification must be one of:\nStrong Match, Potential Match, Needs Human Review.\n`;\n\nreturn {\n  json: {\n    ...data,\n    applicationDetails,\n    aiPrompt: prompt\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        336
+      ],
+      "id": "e5b7fb27-6250-4967-9e3e-59389e55388f",
+      "name": "Building AI prompt"
+    },
+    {
+      "parameters": {
+        "content": "## Reason for using google drive\nhttps was throwing errors due to the link so i used google drive to download directly ",
+        "color": "#3B2353"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1872,
+        528
+      ],
+      "typeVersion": 1,
+      "id": "075f759d-f001-4349-beb0-86a880518e08",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_GROQ_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "=\n{{ JSON.stringify({\n  model: \"openai/gpt-oss-120b\",\n  messages: [\n    {\n      role: \"system\",\n      content: \"You are a recruitment evaluation assistant. Provide objective, evidence-based, job-related analysis for human review only.\"\n    },\n    {\n      role: \"user\",\n      content: $json.aiPrompt\n    }\n  ],\n  temperature: 0.2,\n  response_format: {\n    type: \"json_object\"\n  }\n}) }}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2624,
+        336
+      ],
+      "id": "05d4657e-dee2-4d5c-b83a-2b7e6d8891e9",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst response = $json.choices?.[0]?.message?.content;\n\nif (!response) {\n  throw new Error('Groq returned an empty response');\n}\n\nlet evaluation;\n\ntry {\n  evaluation = JSON.parse(response);\n} catch (error) {\n  throw new Error('Groq response is not valid JSON: ' + error.message);\n}\n\n// Recover original applicant information\nconst source = $('Building AI prompt').item.json;\n\nreturn {\n  json: {\n    ...source,\n    aiScore: evaluation.score,\n    aiClassification: evaluation.classification,\n    aiSummary: evaluation.summary,\n    aiStrengths: evaluation.strengths,\n    aiConcerns: evaluation.concerns,\n    interviewRecommendation: evaluation.interviewRecommendation\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2848,
+        336
+      ],
+      "id": "0704fa63-f6e8-4e51-a460-3c067d07e03b",
+      "name": "Parse AI response"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst d = $json;\nconst app = d.applicationDetails;\n\nconst isBDM = app.role === 'Business Development Manager';\n\nconst toText = (v) => {\n  if (v === undefined || v === null) return '';\n  if (Array.isArray(v)) return v.map(toText).join('; ');\n  if (typeof v === 'object') return Object.values(v).map(toText).join(' - ');\n  return String(v);\n};\n\n\nreturn {\n  json: {\n    'Candidate ID': `CAND-${Date.now()}-${Math.floor(Math.random() * 10000)}`,\n    'Name': app.name,\n    'Email': app.email,\n    'Phone': app.phone,\n    'Role': app.role,\n    'Resume URL': d['Resume/CV'] || d['Resume'] || '',\n    'LinkedIn URL': app.linkedin,\n    'Experience Years': app.experience,\n\n    'Extra Field 1': isBDM\n      ? app.additionalDetails.industryExperience\n      : app.additionalDetails.primaryProgrammingLanguage,\n\n    'Extra field 2': isBDM\n      ? app.additionalDetails.largestDealClosedUSD\n      : app.additionalDetails.github,\n\n    'AI Score': d.aiScore,\n    'AI Classification': d.aiClassification,\n    'AI Summary': toText(d.aiSummary),\n    'AI Strengths': toText(d.aiStrengths),\n    'AI Concerns': toText(d.aiConcerns),\n    'Interview Rec': toText(d.interviewRecommendation),\n\n    'Status': 'Pending Human Review',\n    'Processed At': new Date().toISOString()\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3072,
+        336
+      ],
+      "id": "3f40cc11-944c-48ef-89b4-c11d39865ca9",
+      "name": "Normalize Application Data"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_GID",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Candidate ID",
+              "displayName": "Candidate ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Role",
+              "displayName": "Role",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Resume URL",
+              "displayName": "Resume URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "LinkedIn URL",
+              "displayName": "LinkedIn URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Experience Years",
+              "displayName": "Experience Years",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Extra Field 1",
+              "displayName": "Extra Field 1",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Extra field 2",
+              "displayName": "Extra field 2",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "AI Score",
+              "displayName": "AI Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "AI Classification",
+              "displayName": "AI Classification",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "AI Summary",
+              "displayName": "AI Summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "AI Strengths",
+              "displayName": "AI Strengths",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "AI Concerns",
+              "displayName": "AI Concerns",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Interview Rec",
+              "displayName": "Interview Rec",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Processed At",
+              "displayName": "Processed At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3296,
+        336
+      ],
+      "id": "2179be61-c462-48f4-88a6-b9a45affd89a",
+      "name": "Write to Master Sheet"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "bb043a5a-7e00-4015-870e-21b3dc60486f",
+              "leftValue": "={{ $('Building AI prompt').item.json.applicationDetails.role }}",
+              "rightValue": "Business Development Manager",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        3520,
+        336
+      ],
+      "id": "48cdb9eb-b4be-4452-b38c-6cc1521afaad",
+      "name": "Identify Applicant Source"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_GID",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('Building AI prompt').item.json.row_number }}",
+            "Status": "Processed - Pending Human Review"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Phone Number",
+              "displayName": "Phone Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Resume/CV",
+              "displayName": "Resume/CV",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "LinkedIn Profile URL",
+              "displayName": "LinkedIn Profile URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Experience",
+              "displayName": "Experience",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Industry Experience",
+              "displayName": "Industry Experience",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Largest Deal Closed in USD",
+              "displayName": "Largest Deal Closed in USD",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3744,
+        240
+      ],
+      "id": "519046e4-a6a1-4d36-8662-f3209a44208f",
+      "name": "Update BDM Response"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "a758c85f-59f4-4a91-b010-e43d23efe4f5",
+              "leftValue": "={{ $json.isDuplicate }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": "={{ false }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        1440,
+        272
+      ],
+      "id": "994a385a-19f4-420a-a20c-3a0751ee9c87",
+      "name": "isDuplicate"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "40354841-aa9a-41ca-a75e-1959e023c51d",
+              "leftValue": "={{ $json['Industry Experience'] !== undefined }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        1664,
+        176
+      ],
+      "id": "00c0e2d9-ac98-41d5-9725-63b25609da73",
+      "name": "Identify Duplicate Source"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_GID",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.row_number }}",
+            "Status": "Duplicate"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Phone Number",
+              "displayName": "Phone Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Resume/CV",
+              "displayName": "Resume/CV",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "LinkedIn Profile URL",
+              "displayName": "LinkedIn Profile URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Experience",
+              "displayName": "Experience",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Industry Experience",
+              "displayName": "Industry Experience",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Largest Deal Closed in USD",
+              "displayName": "Largest Deal Closed in USD",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1904,
+        0
+      ],
+      "id": "7e76fb46-b6f8-4381-a741-cc3eaa3c5986",
+      "name": "Mark BDM Duplicate"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_GID",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.row_number }}",
+            "Status": "Duplicate"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Full Name",
+              "displayName": "Full Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Phone number",
+              "displayName": "Phone number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Resume",
+              "displayName": "Resume",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "LinkedIn Profile URL",
+              "displayName": "LinkedIn Profile URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Years of Experience",
+              "displayName": "Years of Experience",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Primary Programming Language",
+              "displayName": "Primary Programming Language",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Github Profile URL",
+              "displayName": "Github Profile URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2032,
+        176
+      ],
+      "id": "02f04df0-b1e8-43a0-a88c-065925e55bfe",
+      "name": "Mark SWE Duplicate"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_GID",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        720,
+        192
+      ],
+      "id": "9a9261e7-4492-4107-a6fe-3a384594e91d",
+      "name": "Hiring master"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        992,
+        272
+      ],
+      "id": "5ea6744f-a37c-423d-92bc-38378dc0268b",
+      "name": "merge"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_GID",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('Building AI prompt').item.json.row_number }}",
+            "Status": "Processed - Pending Human Review"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Full Name",
+              "displayName": "Full Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Phone number",
+              "displayName": "Phone number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Resume",
+              "displayName": "Resume",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "LinkedIn Profile URL",
+              "displayName": "LinkedIn Profile URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Years of Experience",
+              "displayName": "Years of Experience",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Primary Programming Language",
+              "displayName": "Primary Programming Language",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Github Profile URL",
+              "displayName": "Github Profile URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3744,
+        432
+      ],
+      "id": "cba0dc15-c603-414a-99c7-298cf6ad3ec5",
+      "name": "Update SWE response"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        4064,
+        336
+      ],
+      "id": "083d4e98-9ca4-4641-a7da-4ea696b9c215",
+      "name": "merge noti"
+    },
+    {
+      "parameters": {
+        "fromEmail": "sender@example.com",
+        "toEmail": "recipient@example.com",
+        "subject": "=New Application Received – {{ $json.Role }}",
+        "html": "=<h2>New Job Application Received</h2>\n\n<p>A new application has been processed and added to the Hiring Master Sheet.</p>\n\n<p><b>Candidate:</b> {{ $json.Name }}</p>\n<p><b>Role:</b> {{ $json.Role }}</p>\n<p><b>Email:</b> {{ $json.Email }}</p>\n<p><b>AI Score:</b> {{ $json[\"AI Score\"] }}/10</p>\n<p><b>Classification:</b> {{ $json[\"AI Classification\"] }}</p>\n<p><b>Summary:</b> {{ $json[\"AI Summary\"] }}</p>\n<p><b>Strengths:</b> {{ $json[\"AI Strengths\"] }}</p>\n<p><b>Concerns:</b> {{ $json[\"AI Concerns\"] }}</p>\n<p><b>Interview Recommendation:</b> {{ $json[\"Interview Rec\"] }}</p>\n\n<p><b>Status:</b> Pending Human Review</p>\n\n<p>Please review the application before making any hiring decision.</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        4512,
+        336
+      ],
+      "id": "b9dfef29-fe36-4b12-9326-e97f9b8c4ee3",
+      "name": "Send Hiring Notification"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 'merge noti' only carries the sheet-update responses (Status/row_number),\n// which is why Name, Role, AI Score etc. were blank in the email.\n// Pull the full candidate records from Normalize Application Data instead.\nreturn $('Normalize Application Data').all().map(item => ({ json: { ...item.json } }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4288,
+        336
+      ],
+      "id": "e2511baa-a88c-47a0-bd7a-0d67167475c2",
+      "name": "Prepare Notification Data"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "SWE",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Hiring master",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SWE": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "isDuplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert Drive URL to Direct Download": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Building AI prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Building AI prompt": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Parse AI response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI response": {
+      "main": [
+        [
+          {
+            "node": "Normalize Application Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Application Data": {
+      "main": [
+        [
+          {
+            "node": "Write to Master Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write to Master Sheet": {
+      "main": [
+        [
+          {
+            "node": "Identify Applicant Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identify Applicant Source": {
+      "main": [
+        [
+          {
+            "node": "Update BDM Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update SWE response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "isDuplicate": {
+      "main": [
+        [
+          {
+            "node": "Identify Duplicate Source",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Convert Drive URL to Direct Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identify Duplicate Source": {
+      "main": [
+        [
+          {
+            "node": "Mark BDM Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark SWE Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hiring master": {
+      "main": [
+        [
+          {
+            "node": "merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update BDM Response": {
+      "main": [
+        [
+          {
+            "node": "merge noti",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update SWE response": {
+      "main": [
+        [
+          {
+            "node": "merge noti",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "merge noti": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notification Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Notification Data": {
+      "main": [
+        [
+          {
+            "node": "Send Hiring Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "meta": {},
+  "nodeGroups": [],
+  "tags": []
+}
